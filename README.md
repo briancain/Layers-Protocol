@@ -4,6 +4,8 @@ This java program implements the Data Link Layer Protocol
 
 ## Run Arguments
 
+Make sure temp.txt and topology.txt are in the same dir that you are running the project out of
+
         javac Node.java
         javac PhyServer.java
 

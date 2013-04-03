@@ -10,6 +10,8 @@ If you're in eclipse, you can run the following java files in order by right cli
         RunB.java
         RunA.java
 
+If you want to compile from the command line, do the following:
+
 Make sure temp.txt and topology.txt are in the same dir that you are running the project out of
 
         javac Node.java

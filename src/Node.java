@@ -223,6 +223,8 @@ class Dll{
 	private SharedQueue<RlPacket> fromRl;
 	private SharedQueue<DllPacket> fromPhy;
 	private char[] dllHeader;
+	private int num_sent, num_rec, num_ack;
+	private final int window = 10; // window size is 10
 
 	/**
 	 * Default constructor
@@ -240,8 +242,12 @@ class Dll{
 		phy = new Phy(args, this);
 		fromRl = new SharedQueue<RlPacket>(Common.queueCapacity);
 		fromPhy = new SharedQueue<DllPacket>(Common.queueCapacity);
+		num_sent = 0;
+		num_ack = 0;
+		num_rec = 0;
 		
 		/* Waits for packets pushed down by Rl */
+		// Physical Layer Send thread
 		(new Thread(){
 			public void run(){
 				while(true){
@@ -256,6 +262,7 @@ class Dll{
 		}).start();
 		
 		/* Waits for packets pushed by Phy */
+		// Routing Layer Receive Thread
 		(new Thread(){
 			public void run(){
 				while(true){
@@ -263,11 +270,12 @@ class Dll{
 					// Print system header to console
 					//String header = dllPkt.getHeader();
 					//System.out.println("DllHeader: " + header);
-					rl.receive(dllPkt.getRlPacket());				
+					rl.receive(dllPkt.getRlPacket());
 				}
 			}
 		}).start();
 	}
+	
 	public void send(RlPacket rlPkt){
 		fromRl.insert(rlPkt);
 	}

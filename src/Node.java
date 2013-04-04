@@ -225,6 +225,7 @@ class Dll{
 	private char[] dllHeader;
 	private int num_sent, num_rec, num_ack;
 	private final int window = 10; // window size is 10
+	private SharedQueue<DllPacket> sbuff; // sendbuff List
 
 	/**
 	 * Default constructor
@@ -248,12 +249,12 @@ class Dll{
 		
 		/* Waits for packets pushed down by Rl */
 		// Physical Layer Send thread
+		// dllX - X: Msg(1) or Ack(0)
 		(new Thread(){
 			public void run(){
 				while(true){
 					RlPacket rlPkt = fromRl.remove();
-					dllHeader = new char[Common.dllHeaderLen];
-					dllHeader[0]='d';dllHeader[1]='l';dllHeader[2]='l';
+					dllHeader = buildHeader("msg");
 					// add ack in header? 10 byte size
 					DllPacket dllPkt = new DllPacket(rlPkt, dllHeader);
 					phy.send(dllPkt);
@@ -268,12 +269,60 @@ class Dll{
 				while(true){
 					DllPacket dllPkt = fromPhy.remove();
 					// Print system header to console
-					//String header = dllPkt.getHeader();
-					//System.out.println("DllHeader: " + header);
+					String header = dllPkt.getHeader();
+					System.out.println("DllHeader: " + header);
+					if (isMsg(header)){
+						System.out.println("This is a msg.");
+						// send ack, increment num_ack
+						System.out.println("Sending Ack.");
+						sendAck(dllPkt);
+						// send ack, start timer, if timeout, resend?
+						// ack dll == dll0<num_rec>
+					}
+					else if (isAck(header)){
+						System.out.println("This is an ack");
+					}
 					rl.receive(dllPkt.getRlPacket());
 				}
 			}
 		}).start();
+	}
+	
+	public void sendAck(DllPacket dllpkt){
+		String src = dllpkt.getRlPacket().getAppPacket().getDst();
+		String dst = dllpkt.getRlPacket().getAppPacket().getSrc();
+		String payload = "";
+		AppPacket ap = new AppPacket(src, dst, payload);
+		
+		char[] rh = new char[Common.rlHeaderLen];
+		rh[0]='r';rh[1]='l';rh[2]='h';
+		RlPacket rlp = new RlPacket(ap, rh);
+
+		char[] head = buildHeader("ack");
+		DllPacket dllack = new DllPacket(rlp, head);
+		phy.send(dllack);
+	}
+	
+	public char[] buildHeader(String headerType){
+		// index 4 needs to be some sort of sequence number, either num rec/packet num/something...
+		char[] dllh = new char[Common.dllHeaderLen];
+		dllh[0]='d';dllh[1]='l';dllh[2]='l';
+		if (headerType.equals("msg")){
+			dllh[3]='1';
+		}
+		else if (headerType.equals("ack")){
+			dllh[3]='0';
+		}
+		
+		return dllh;
+	}
+	
+	public Boolean isMsg(String msg){
+		return (msg.charAt(3) == '1');
+	}
+	
+	public Boolean isAck(String msg){
+		return (msg.charAt(3) == '0');
 	}
 	
 	public void send(RlPacket rlPkt){

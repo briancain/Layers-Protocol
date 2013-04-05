@@ -6,6 +6,11 @@ public class SharedQueue<T> {
     SharedQueue(int c){
     	sharedQueue = new LinkedBlockingQueue<T>(c);
     }
+    
+    public int getSize(){
+    	return sharedQueue.size();
+    }
+    
     public void insert(T t){
     	try {
             sharedQueue.put(t);

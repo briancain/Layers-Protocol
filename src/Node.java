@@ -10,8 +10,10 @@ import java.io.FileWriter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.io.BufferedReader;
 
 /**
@@ -123,27 +125,29 @@ public class Node{
 
 			try {
 				while(true){
-					AppPacket appPkt = app.recv();
-					//String dest = appPkt.getDst();
-					//String src = appPkt.getSrc(); // if src = 0, it means it is a broadcasted message
-					//System.out.println(dest + " received \"" + 
-					//appPkt.getPayload() + "\" from " + src);
-					app.getNodeID();
-					
-					if(appPkt.getPayload() == null){
-						bw.close();
-						System.out.println("I received the file. " +
-								"I am closing it now and exiting");
-						break;
-					}
-					else
-						/* 
-						 * Do not forget to append a new line character at
-						 * the end of payload if you were reading the file line by line,
-						 * and transmitting individual lines. If you are reading the file 
-						 * bye by byte, then you may not have to do this.
-						 */
-						bw.write(appPkt.getPayload()+"\n");
+                    AppPacket appPkt = app.recv();
+                    String dest = appPkt.getDst();
+                    String src = appPkt.getSrc(); // if src = 0, it means it is a broadcasted message
+                    System.out.println(dest + " received \"" +
+                    appPkt.getPayload() + "\" from " + src);
+                    app.getNodeID();
+
+                    if(appPkt.getPayload() == null){
+                            bw.close();
+                            System.out.println("I received the file. " +
+                                            "I am closing it now and exiting");
+                            break;
+                    }
+                    else
+                            /*
+                             * Do not forget to append a new line character at
+                             * the end of payload if you were reading the file line by line,
+                             * and transmitting individual lines. If you are reading the file
+                             * bye by byte, then you may not have to do this.
+                             */
+                            bw.write(appPkt.getPayload()+"\n");
+                            //bw.close();
+                            //System.exit(0);
 				}
 			} catch (IOException e) {
 				System.err.println(e);
@@ -225,7 +229,8 @@ class Dll{
 	private char[] dllHeader;
 	private int num_sent, num_rec, num_ack;
 	private final int window = 10; // window size is 10
-	private SharedQueue<DllPacket> sbuff; // sendbuff List
+	private ArrayList<DllPacket> sbuff = new ArrayList<DllPacket>(); // sendbuff List
+	private long timer;
 
 	/**
 	 * Default constructor
@@ -244,20 +249,43 @@ class Dll{
 		fromRl = new SharedQueue<RlPacket>(Common.queueCapacity);
 		fromPhy = new SharedQueue<DllPacket>(Common.queueCapacity);
 		num_sent = 0;
-		num_ack = 0;
 		num_rec = 0;
+		num_ack = 0;
 		
 		/* Waits for packets pushed down by Rl */
 		// Physical Layer Send thread
-		// dllX - X: Msg(1) or Ack(0)
+		// DLL packet header looks like this below:
+		// dllXZZZZZZ - X: Msg == 1 or Ack == 0; Z: num_sent or num_received
 		(new Thread(){
 			public void run(){
 				while(true){
-					RlPacket rlPkt = fromRl.remove();
-					dllHeader = buildHeader("msg");
-					// add ack in header? 10 byte size
-					DllPacket dllPkt = new DllPacket(rlPkt, dllHeader);
-					phy.send(dllPkt);
+					//System.out.println("rmRL size: " + fromRl.getSize());
+					//System.out.println("Num_Sent: " + num_sent + " Num_ack: " + num_ack + " Num_rec: " + num_rec + " sbuff size: " + sbuff.size());
+					if (num_sent < (num_ack + window) && sbuff.size() - 1 < num_sent && fromRl.getSize() > 0){
+						RlPacket rlPkt = fromRl.remove();
+						// condition should be the same as sbuff[ns] == null
+						dllHeader = buildHeader("msg");
+						System.out.println("dll header going to phy: " + new String(dllHeader));
+						// add ack in header? 1f0 byte size
+						DllPacket dllPkt = new DllPacket(rlPkt, dllHeader);
+						sbuff.add(dllPkt);
+						phy.send(dllPkt); num_sent++;
+						if (num_sent == num_ack + window){
+							// start timer
+							System.out.println("Starting Timer...");
+							timer = System.currentTimeMillis();
+						}
+					}
+					else if (sbuff.size() != num_sent){
+						// if condition should be the same as sbuff[ns] != null
+						System.out.println("sbuff[ns]!=null");
+						phy.send(sbuff.get(num_sent)); num_sent++;
+					}
+					else if (System.currentTimeMillis() - timer > 100){
+						// timeout
+						System.out.println("Time out...");
+						num_sent = num_ack;
+					}
 				}
 			}
 		}).start();
@@ -267,22 +295,40 @@ class Dll{
 		(new Thread(){
 			public void run(){
 				while(true){
-					DllPacket dllPkt = fromPhy.remove();
-					// Print system header to console
-					String header = dllPkt.getHeader();
-					System.out.println("DllHeader: " + header);
-					if (isMsg(header)){
-						System.out.println("This is a msg.");
-						// send ack, increment num_ack
-						System.out.println("Sending Ack.");
-						sendAck(dllPkt);
-						// send ack, start timer, if timeout, resend?
-						// ack dll == dll0<num_rec>
+					if (fromPhy.getSize() > 0){
+						DllPacket dllPkt = fromPhy.remove();
+						// Print system header to console
+						String header = dllPkt.getHeader();
+						System.out.println("DllHeader: " + header);
+						
+						if (isMsg(header)){
+							String sub_header = header.substring(4);
+							int x = Integer.parseInt(sub_header.trim());
+							System.out.println("This is a msg.");
+							if (num_rec == x){
+								System.out.println("I got x: " + x + "...Sending to RL");
+								num_rec++;
+								rl.receive(dllPkt.getRlPacket());// deliver message
+							}
+							// send ack
+							System.out.println("Sending Ack.");
+							sendAck(dllPkt);
+							// send ack, start timer, if timeout, resend?
+							// ack dll == dll0<num_rec>
+						}
+						else if (isAck(header)){
+
+							String sub_header = header.substring(4);
+							int s = Integer.parseInt(sub_header.trim());
+							System.out.println("This is an ack");
+							if (s > num_ack){
+								System.out.println("s > na");
+								num_ack = s;
+							}
+							// cancel timer
+							timer = System.currentTimeMillis();
+						}
 					}
-					else if (isAck(header)){
-						System.out.println("This is an ack");
-					}
-					rl.receive(dllPkt.getRlPacket());
 				}
 			}
 		}).start();
@@ -304,14 +350,34 @@ class Dll{
 	}
 	
 	public char[] buildHeader(String headerType){
-		// index 4 needs to be some sort of sequence number, either num rec/packet num/something...
 		char[] dllh = new char[Common.dllHeaderLen];
 		dllh[0]='d';dllh[1]='l';dllh[2]='l';
+		
 		if (headerType.equals("msg")){
+			// Header needs to be a message
 			dllh[3]='1';
+			char[] ns = Integer.toString(num_sent).toCharArray();
+			int index = 4;
+			
+			for (int i = 0; i < ns.length; i++){
+				if (index <= 10){
+					dllh[index] = ns[i];
+					index++;
+				}
+			}
 		}
 		else if (headerType.equals("ack")){
+			// Header needs to be an ack
 			dllh[3]='0';
+			char[] nr = Integer.toString(num_rec).toCharArray();
+			int index = 4;
+			
+			for (int i = 0; i < nr.length; i++){
+				if (index <= 10){
+					dllh[index] = nr[i];
+					index++;
+				}
+			}
 		}
 		
 		return dllh;

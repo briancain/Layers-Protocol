@@ -26,3 +26,7 @@ Then in three seperate terminals, in order, enter these commands
 ## Warning
 
 If you are a student taking CIS 725, please remember you are still bound by the K-State Honor Code. Copying this code and passing it off as your own is a violation of that Honor Code.
+
+## Todo
+
+Go through path that a long fragment line would go through (lines > 40 bytes) to see differences between that and non-fragment lines

@@ -94,8 +94,8 @@ public class Node{
 			String line;
 			
 			try {
-				//br = new BufferedReader(new FileReader("temp.txt"));
-				br = new BufferedReader(new FileReader("test.txt"));
+				br = new BufferedReader(new FileReader("temp.txt"));
+				//br = new BufferedReader(new FileReader("test.txt"));
 			} catch (FileNotFoundException e) {
 				System.err.println(e);
 			}
@@ -377,7 +377,8 @@ class Dll{
 
 							String sub_header = header.substring(4);
 							int s = Integer.parseInt(sub_header.trim());
-							//System.out.println("This is an ack");
+							System.out.println("This is an ack");
+							// this if not entering, acks not being accepted 
 							if (s > num_ack){
 								//System.out.println("s > na");
 								num_ack = s;

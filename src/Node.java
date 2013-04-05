@@ -424,6 +424,10 @@ class Dll{
 					tempPayload = "";
 				}
 			}
+			System.out.println("This is the temp payload: " + tempPayload);
+			RlPacket pkt = buildRlPkt(tempPayload, rlPkt);
+			rlpktlst.add(pkt);
+			tempPayload = "";
 		}
 		
 		return rlpktlst;

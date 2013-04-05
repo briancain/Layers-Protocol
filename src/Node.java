@@ -94,7 +94,8 @@ public class Node{
 			String line;
 			
 			try {
-				br = new BufferedReader(new FileReader("temp.txt"));
+				//br = new BufferedReader(new FileReader("temp.txt"));
+				br = new BufferedReader(new FileReader("test.txt"));
 			} catch (FileNotFoundException e) {
 				System.err.println(e);
 			}
@@ -135,7 +136,8 @@ public class Node{
                             bw.close();
                             System.out.println("I received the file. " +
                                             "I am closing it now and exiting");
-                            break;
+                            //break;
+                            System.exit(0);
                     }
                     else
                             /*
@@ -231,6 +233,10 @@ class Dll{
 	private ArrayList<DllPacket> sbuff = new ArrayList<DllPacket>(); // sendbuff List
 	private long timer;
 	private Boolean timer_running;
+	ArrayList<RlPacket> packetList = new ArrayList<RlPacket>();
+	
+	private String rest;
+	
 
 	/**
 	 * Default constructor
@@ -252,6 +258,7 @@ class Dll{
 		num_rec = 0;
 		num_ack = 0;
 		timer_running = false;
+		rest = "";
 		
 		/* Waits for packets pushed down by Rl */
 		// Physical Layer Send thread
@@ -263,14 +270,37 @@ class Dll{
 			public void run(){
 				while(true){
 					if (num_sent < (num_ack + window) && sbuff.size() - 1 < num_sent && fromRl.getSize() > 0){
-						RlPacket rlPkt = fromRl.remove();
-						// call method to split up payload into bytes
 						
-						// build packet
-						dllHeader = buildHeader("msg");
-						DllPacket dllPkt = new DllPacket(rlPkt, dllHeader);
-						sbuff.add(dllPkt);
-						phy.send(dllPkt); num_sent++;
+						if (packetList.isEmpty()){
+							RlPacket rlPkt = fromRl.remove();
+							packetList = fragPayload(rlPkt);
+							RlPacket tempRlPkt = packetList.remove(0);
+							if (packetList.size() < 1){
+								// payload is smaller than 40 bytes
+								dllHeader = buildHeader("msg");
+							}
+							else{
+								dllHeader = buildHeader("frag");
+							}
+							DllPacket sendPkt = new DllPacket(tempRlPkt, dllHeader);
+							sbuff.add(sendPkt);
+							phy.send(sendPkt); num_sent++;
+						}
+						else if (packetList.size() == 1){
+							RlPacket tempRlPkt = packetList.remove(0);
+							dllHeader = buildHeader("frag_end");
+							DllPacket sendPkt = new DllPacket(tempRlPkt, dllHeader);
+							sbuff.add(sendPkt);
+							phy.send(sendPkt); num_sent++;
+						}
+						else{
+							RlPacket tempRlPkt = packetList.remove(0);
+							dllHeader = buildHeader("frag");
+							DllPacket sendPkt = new DllPacket(tempRlPkt, dllHeader);
+							sbuff.add(sendPkt);
+							phy.send(sendPkt); num_sent++;
+						}
+						
 						//start to time out if messages lost
 						if (num_sent == num_ack + window){
 							// start timer
@@ -281,7 +311,7 @@ class Dll{
 					}
 					else if (sbuff.size() != num_sent){
 						// if condition should be the same as sbuff[ns] != null
-						System.out.println("sbuff[ns]!=null");
+						//System.out.println("sbuff[ns]!=null");
 						phy.send(sbuff.get(num_sent)); num_sent++;
 					}
 					else if ((System.currentTimeMillis() - timer > 100)){
@@ -298,22 +328,45 @@ class Dll{
 		// Routing Layer Receive Thread
 		(new Thread(){
 			public void run(){
+				String payload = "";
 				while(true){
 					if (fromPhy.getSize() > 0){
 						DllPacket dllPkt = fromPhy.remove();
 						// Print system header to console
 						String header = dllPkt.getHeader();
-						System.out.println("DllHeader: " + header);
+						//System.out.println("DllHeader: " + header);
 						
 						if (isMsg(header)){
-							String sub_header = header.substring(4);
-							int x = Integer.parseInt(sub_header.trim());
-							System.out.println("This is a msg.");
-							if (num_rec == x){
-								System.out.println("I got x: " + x + "...Sending to RL");
-								num_rec++;
-								rl.receive(dllPkt.getRlPacket());// deliver message
+							// another message to combine fragments with each other
+							if (isFrag(header)){
+								payload += dllPkt.getRlPacket().getAppPacket().getPayload();
 							}
+							else if (isEnd(header)){
+								// I don't know if this is working right....
+								payload += dllPkt.getRlPacket().getAppPacket().getPayload();
+								RlPacket rlnew = buildRlPkt(payload, dllPkt.getRlPacket());
+								DllPacket completeDllPkt = new DllPacket(rlnew, buildHeader("msg"));
+								
+								String sub_header = header.substring(4);
+								int x = Integer.parseInt(sub_header.trim());
+								System.out.println("This is a msg.");
+								if (num_rec == x){
+									System.out.println("I got x: " + x + "...Sending to RL");
+									num_rec++;
+									rl.receive(completeDllPkt.getRlPacket());// deliver message
+								}
+							}
+							else{
+								String sub_header = header.substring(4);
+								int x = Integer.parseInt(sub_header.trim());
+								System.out.println("This is a msg.");
+								if (num_rec == x){
+									System.out.println("I got x: " + x + "...Sending to RL");
+									num_rec++;
+									rl.receive(dllPkt.getRlPacket());// deliver message
+								}
+							}
+							
 							// send ack
 							System.out.println("Sending Ack.");
 							sendAck(dllPkt);
@@ -324,9 +377,9 @@ class Dll{
 
 							String sub_header = header.substring(4);
 							int s = Integer.parseInt(sub_header.trim());
-							System.out.println("This is an ack");
+							//System.out.println("This is an ack");
 							if (s > num_ack){
-								System.out.println("s > na");
+								//System.out.println("s > na");
 								num_ack = s;
 							}
 							// cancel timer
@@ -337,6 +390,58 @@ class Dll{
 				}
 			}
 		}).start();
+	}
+	
+	/**
+	 * 
+	 * @author bccain
+	 *
+	 */
+	public ArrayList<RlPacket> fragPayload(RlPacket rlPkt){
+		// assumes string char is 2 bytes each
+		ArrayList<RlPacket> rlpktlst = new ArrayList<RlPacket>();
+		String payload = rlPkt.getAppPacket().getPayload();
+		String tempPayload = "";
+		int count = 0;
+		
+		if (payload == null){
+			rlpktlst.add(rlPkt);
+		}
+		else if (payload.length() < 20){
+			RlPacket pkt = buildRlPkt(payload, rlPkt);
+			rlpktlst.add(pkt);
+		}
+		else{
+			for (int i = 0; i < payload.length(); i++){
+				if (count < 20){
+					tempPayload += payload.charAt(i); count++;
+				}
+				else{
+					count = 0;
+					System.out.println("This is the temp payload: " + tempPayload);
+					RlPacket pkt = buildRlPkt(tempPayload, rlPkt);
+					rlpktlst.add(pkt);
+					tempPayload = "";
+				}
+			}
+		}
+		
+		return rlpktlst;
+	}
+	
+	/**
+	 * 
+	 * @author bccain
+	 *
+	 */
+	public RlPacket buildRlPkt(String payload, RlPacket rlpkt){
+		String src = rlpkt.getAppPacket().getSrc();
+		String dst = rlpkt.getAppPacket().getDst();
+		AppPacket ap = new AppPacket(src, dst, payload);
+		
+		RlPacket rlp = new RlPacket(ap, rlpkt.getHeader().toCharArray());
+		
+		return rlp;
 	}
 	
 	/**
@@ -384,6 +489,30 @@ class Dll{
 				}
 			}
 		}
+		else if(headerType.equals("frag")){
+			dllh[3]='F';
+			char[] ns = Integer.toString(num_sent).toCharArray();
+			int index = 4;
+			
+			for (int i = 0; i < ns.length; i++){
+				if (index <= 10){
+					dllh[index] = ns[i];
+					index++;
+				}
+			}
+		}
+		else if(headerType.equals("frag_end")){
+			dllh[3]='E';
+			char[] ns = Integer.toString(num_sent).toCharArray();
+			int index = 4;
+			
+			for (int i = 0; i < ns.length; i++){
+				if (index <= 10){
+					dllh[index] = ns[i];
+					index++;
+				}
+			}
+		}
 		else if (headerType.equals("ack")){
 			// Header needs to be an ack
 			dllh[3]='0';
@@ -401,8 +530,16 @@ class Dll{
 		return dllh;
 	}
 	
+	public Boolean isFrag(String msg){
+		return (msg.charAt(3) == 'F');
+	}
+	
+	public Boolean isEnd(String msg){
+		return (msg.charAt(3) == 'E');
+	}
+	
 	public Boolean isMsg(String msg){
-		return (msg.charAt(3) == '1');
+		return (msg.charAt(3) == '1' || msg.charAt(3) == 'F' || msg.charAt(3) == 'E');
 	}
 	
 	public Boolean isAck(String msg){

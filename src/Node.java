@@ -10,7 +10,6 @@ import java.io.FileWriter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -231,6 +230,7 @@ class Dll{
 	private final int window = 10; // window size is 10
 	private ArrayList<DllPacket> sbuff = new ArrayList<DllPacket>(); // sendbuff List
 	private long timer;
+	private Boolean timer_running;
 
 	/**
 	 * Default constructor
@@ -251,29 +251,32 @@ class Dll{
 		num_sent = 0;
 		num_rec = 0;
 		num_ack = 0;
+		timer_running = false;
 		
 		/* Waits for packets pushed down by Rl */
 		// Physical Layer Send thread
 		// DLL packet header looks like this below:
 		// dllXZZZZZZ - X: Msg == 1 or Ack == 0; Z: num_sent or num_received
+		// 
+		// Protocol based off of Dr Singh's CIS 725 lecture slides after_Data_Link_Layer_2.pdf Go Back N
 		(new Thread(){
 			public void run(){
 				while(true){
-					//System.out.println("rmRL size: " + fromRl.getSize());
-					//System.out.println("Num_Sent: " + num_sent + " Num_ack: " + num_ack + " Num_rec: " + num_rec + " sbuff size: " + sbuff.size());
 					if (num_sent < (num_ack + window) && sbuff.size() - 1 < num_sent && fromRl.getSize() > 0){
 						RlPacket rlPkt = fromRl.remove();
-						// condition should be the same as sbuff[ns] == null
+						// call method to split up payload into bytes
+						
+						// build packet
 						dllHeader = buildHeader("msg");
-						System.out.println("dll header going to phy: " + new String(dllHeader));
-						// add ack in header? 1f0 byte size
 						DllPacket dllPkt = new DllPacket(rlPkt, dllHeader);
 						sbuff.add(dllPkt);
 						phy.send(dllPkt); num_sent++;
+						//start to time out if messages lost
 						if (num_sent == num_ack + window){
 							// start timer
 							System.out.println("Starting Timer...");
 							timer = System.currentTimeMillis();
+							timer_running = true;
 						}
 					}
 					else if (sbuff.size() != num_sent){
@@ -281,10 +284,11 @@ class Dll{
 						System.out.println("sbuff[ns]!=null");
 						phy.send(sbuff.get(num_sent)); num_sent++;
 					}
-					else if (System.currentTimeMillis() - timer > 100){
+					else if ((System.currentTimeMillis() - timer > 100)){
 						// timeout
-						System.out.println("Time out...");
+						//System.out.println("Time out...");
 						num_sent = num_ack;
+						timer_running = false;
 					}
 				}
 			}
@@ -327,6 +331,7 @@ class Dll{
 							}
 							// cancel timer
 							timer = System.currentTimeMillis();
+							timer_running = false;
 						}
 					}
 				}
@@ -334,6 +339,13 @@ class Dll{
 		}).start();
 	}
 	
+	/**
+	 * This method generates a new ack packet by reversing the
+	 * destination and source, giving a blank payload. Calls buildHeader
+	 * to give dllHeader an ack bit. Then sends ack through physical layer
+	 * @author bccain
+	 *
+	 */
 	public void sendAck(DllPacket dllpkt){
 		String src = dllpkt.getRlPacket().getAppPacket().getDst();
 		String dst = dllpkt.getRlPacket().getAppPacket().getSrc();
@@ -349,6 +361,12 @@ class Dll{
 		phy.send(dllack);
 	}
 	
+	/**
+	 * This method builds a new dllHeader char[]. Takes a
+	 * String headerType
+	 * @author bccain
+	 *
+	 */
 	public char[] buildHeader(String headerType){
 		char[] dllh = new char[Common.dllHeaderLen];
 		dllh[0]='d';dllh[1]='l';dllh[2]='l';

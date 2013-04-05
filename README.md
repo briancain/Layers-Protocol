@@ -22,3 +22,7 @@ Then in three seperate terminals, in order, enter these commands
         java PhyServer topology.txt 1337
         java Node B localhost 1337
         java Node A localhost 1337
+
+## Warning
+
+If you are a student taking CIS 725, please remember you are still bound by the K-State Honor Code. Copying this code and passing it off as your own is a violation of that Honor Code.

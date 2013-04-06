@@ -7,6 +7,10 @@ public class SharedQueue<T> {
     	sharedQueue = new LinkedBlockingQueue<T>(c);
     }
     
+    public Boolean isEmpty(){
+    	return sharedQueue.isEmpty();
+    }
+    
     public int getSize(){
     	return sharedQueue.size();
     }

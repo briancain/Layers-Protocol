@@ -30,3 +30,7 @@ If you are a student taking CIS 725, please remember you are still bound by the 
 ## Todo
 
 Go through path that a long fragment line would go through (lines > 40 bytes) to see differences between that and non-fragment lines
+
+Check if statement, .isEmpty() after 3 packet fragments are sent
+
+Go into second thread and see how that side is handled

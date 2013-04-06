@@ -128,8 +128,7 @@ public class Node{
                     AppPacket appPkt = app.recv();
                     String dest = appPkt.getDst();
                     String src = appPkt.getSrc(); // if src = 0, it means it is a broadcasted message
-                    System.out.println(dest + " received \"" +
-                    appPkt.getPayload() + "\" from " + src);
+                    System.out.println(dest + " received \"" + appPkt.getPayload() + "\" from " + src);
                     app.getNodeID();
 
                     if(appPkt.getPayload() == null){

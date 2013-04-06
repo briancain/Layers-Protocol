@@ -18,6 +18,9 @@ public final class Common {
 	public static final int MinError = 0;
 	public static final int MaxError = 100;
 	// Set the error rate here between 0 to 99
+	//public static final int ErrorRate = 10;
+	//public static final int ErrorRate = 20;
 	public static final int ErrorRate = 30;
+	//public static final int ErrorRate = 40;
 }
 

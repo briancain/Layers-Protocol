@@ -128,7 +128,7 @@ public class Node{
                     AppPacket appPkt = app.recv();
                     String dest = appPkt.getDst();
                     String src = appPkt.getSrc(); // if src = 0, it means it is a broadcasted message
-                    //System.out.println(dest + " received \"" + appPkt.getPayload() + "\" from " + src);
+                    System.out.println(dest + " received \"" + appPkt.getPayload() + "\" from " + src);
                     app.getNodeID();
 
                     if(appPkt.getPayload() == null){
@@ -312,10 +312,7 @@ class Dll{
 					else if (sbuff.size() != num_sent){
 						// if condition should be the same as sbuff[ns] != null
 						//System.out.println("sbuff[ns]!=null");
-						if (num_sent > sbuff.size()){
-							
-						}
-						else {
+						if (!(num_sent > sbuff.size())){
 							phy.send(sbuff.get(num_sent)); num_sent++;
 						}
 						
